@@ -1,4 +1,5 @@
-requests 
-python-dotenv 
-supabase 
+requests
+python-dotenv
+supabase
 postgrest 
+
