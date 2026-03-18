@@ -1,0 +1,35 @@
+name: DataWin Pro Daily Update
+
+on:
+  schedule:
+    - cron: '0 9 * * *' # Corre a las 3:00 AM hora CDMX
+  workflow_dispatch: # Permite correrlo manualmente con un botón
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Update Stats
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SPORT_DATA_IO_KEY: ${{ secrets.SPORT_DATA_IO_KEY }}
+        run: python stats_feeder.py
+      - name: Refresh Indices
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python data_refresher.py
+      - name: Daily Games
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SPORT_DATA_IO_KEY: ${{ secrets.SPORT_DATA_IO_KEY }}
+        run: python daily_fixtures.py
