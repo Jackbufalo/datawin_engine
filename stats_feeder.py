@@ -5,6 +5,18 @@ from supabase import create_client
 
 load_dotenv()
 
+# Estas líneas nos dirán la verdad en la terminal de GitHub
+print(f"DEBUG: Nombre de la URL en el sistema: {os.getenv('SUPABASE_URL')[:10] if os.getenv('SUPABASE_URL') else 'VACÍO'}")
+print(f"DEBUG: ¿La llave de servicio existe?: {'SÍ' if os.getenv('SUPABASE_SERVICE_ROLE_KEY') else 'NO, ESTÁ VACÍA'}")
+
+url = os.getenv("SUPABASE_URL")
+key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+if not url or not key:
+    raise ValueError("Error fatal: Las credenciales no llegaron desde GitHub Actions.")
+
+supabase = create_client(url, key)
+
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
 api_key = os.getenv("SPORT_DATA_IO_KEY")
 SEASON = "2025" 
