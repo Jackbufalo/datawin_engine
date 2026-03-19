@@ -2,8 +2,8 @@ name: NBA Data Update
 
 on:
   schedule:
-    - cron: '0 13 * * *' 
-  workflow_dispatch: 
+    - cron: '0 13 * * *' # 7:00 AM MX aproximadamente
+  workflow_dispatch: # Permite ejecutarlo manualmente
 
 jobs:
   build:
@@ -12,11 +12,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          ref: main # Forzamos que baje la última versión de la rama principal
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
+          cache: 'pip' # Optimiza pero asegura frescura
 
       - name: Install dependencies
         run: |
