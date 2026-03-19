@@ -2,8 +2,8 @@ name: NBA Data Update
 
 on:
   schedule:
-    - cron: '0 13 * * *' # Se ejecuta diario a las 7:00 AM MX aprox
-  workflow_dispatch: # Permite ejecutarlo manualmente desde GitHub
+    - cron: '0 13 * * *' 
+  workflow_dispatch: 
 
 jobs:
   build:
