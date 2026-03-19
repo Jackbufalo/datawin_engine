@@ -1,87 +1,89 @@
 import os
 import requests
+import math # Solo usamos librerías nativas
 from datetime import datetime
 from dotenv import load_dotenv
 from supabase import create_client
 
-# Cargar variables de entorno
 load_dotenv()
-
-# Configuración de Supabase y API
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
 api_key = os.getenv("SPORT_DATA_IO_KEY")
 
-def fetch_daily_games():
-    # 1. Obtener fecha de hoy en formato YYYY-MMM-DD (ej: 2026-MAR-18)
-    # Nota: Sportsdata.io es estricto con el formato de fecha
-    today = datetime.now().strftime("%Y-%b-%d").upper()
-    print(f"📅 Buscando partidos para hoy: {today}...")
+def american_to_decimal(american_odds):
+    if american_odds is None or american_odds == 0: return None
+    try:
+        val = int(american_odds)
+        return round((val / 100) + 1, 2) if val > 0 else round((100 / abs(val)) + 1, 2)
+    except: return None
 
-    # 2. Endpoint de Partidos por Día (Scores)
-    url = f"https://api.sportsdata.io/v3/nba/scores/json/GamesByDate/{today}?key={api_key}"
+def calcular_probabilidad_nba_lite(mu_home, mu_away):
+    """
+    Aproximación de Skellam usando Distribución Normal.
+    Ideal para NBA porque mu_home + mu_away > 200.
+    """
+    diff = mu_home - mu_away
+    std_dev = math.sqrt(mu_home + mu_away)
     
+    # Cálculo de la CDF de una Normal(diff, std_dev) para x > 0
+    # Usamos la función de error (erf) que es nativa de math
+    prob_home = 0.5 * (1 + math.erf(diff / (std_dev * math.sqrt(2))))
+    return round(prob_home, 4), round(1 - prob_home, 4)
+
+def process_daily_predictions():
+    today_api = datetime.now().strftime("%Y-%b-%d").upper()
+    fecha_mx_str = datetime.now().strftime("%d/%m/%Y %H:%M")
+    
+    print(f"🚀 Iniciando DataWin Pro (Versión Lite) para: {today_api}")
+
+    url = f"https://api.sportsdata.io/v3/nba/scores/json/GamesByDate/{today_api}?key={api_key}"
     try:
         response = requests.get(url)
-        if response.status_code != 200:
-            print(f"❌ Error API: {response.status_code} - {response.text}")
-            return
-        
         games = response.json()
     except Exception as e:
-        print(f"❌ Error de conexión: {e}")
+        print(f"❌ Error API: {e}")
         return
 
     if not games:
-        print(f"📭 No hay partidos programados para hoy ({today}).")
+        print("📭 No hay partidos hoy.")
         return
 
-    # Mapeo de IDs de equipos (necesitamos el UUID de Supabase)
-    db_teams = supabase.table("teams").select("id, api_sports_id").eq("league", "NBA").execute().data
-    id_map = {str(t['api_sports_id']): t['id'] for t in db_teams}
+    db_teams = supabase.table("teams").select("id, api_sports_id, name, att_index, def_index, logo_url").eq("league", "NBA").execute().data
+    team_map = {str(t['api_sports_id']): t for t in db_teams if t['api_sports_id']}
 
     for game in games:
-        home_api_id = str(game.get('HomeTeamID'))
-        away_api_id = str(game.get('AwayTeamID'))
+        h_id = str(game.get('HomeTeamID'))
+        a_id = str(game.get('AwayTeamID'))
 
-        # Verificamos que ambos equipos existan en nuestra base de datos
-        if home_api_id in id_map and away_api_id in id_map:
-            match_payload = {
-                "api_match_id": str(game['GameID']),
-                "home_team_id": id_map[home_api_id],
-                "away_team_id": id_map[away_api_id],
-                "match_date": game.get('DateTime'),
-                "status": game.get('Status'),
-                "league": "NBA"
+        if h_id in team_map and a_id in team_map:
+            home = team_map[h_id]
+            away = team_map[a_id]
+
+            # Lambdas
+            mu_h = 112 * (home['att_index'] / away['def_index'])
+            mu_a = 112 * (away['att_index'] / home['def_index'])
+            
+            # Usamos la función LITE que no necesita Scipy
+            p_home, p_away = calcular_probabilidad_nba_lite(mu_h, mu_a)
+
+            prediction_payload = {
+                "match_id": str(game['GameID']),
+                "fecha_mx": fecha_mx_str,
+                "home_team": home['name'],
+                "away_team": away['name'],
+                "home_logo": home.get('logo_url'),
+                "away_logo": away.get('logo_url'),
+                "home_win_p": p_home,
+                "away_win_p": p_away,
+                "home_odds": american_to_decimal(game.get('HomeTeamMoneyLine')),
+                "away_odds": american_to_decimal(game.get('AwayTeamMoneyLine')),
+                "status": game.get('Status')
             }
 
             try:
-                # 3. Guardar o actualizar el partido en 'matches'
-                # Usamos upsert para actualizar el status si el partido ya existe
-                res_match = supabase.table("matches").upsert(match_payload, on_conflict="api_match_id").execute()
-                
-                # Extraer el UUID generado/existente para la tabla de odds
-                current_match_uuid = res_match.data[0]['id']
-
-                # 4. Guardar Momios (Odds) si están disponibles en la respuesta
-                # Sportsdata.io a veces devuelve estos campos en el mismo objeto de Scores
-                home_ml = game.get('HomeTeamMoneyLine')
-                if home_ml is not None:
-                    odds_payload = {
-                        "match_id": current_match_uuid,
-                        "home_odds": int(home_ml) if home_ml else None,
-                        "away_odds": int(game.get('AwayTeamMoneyLine')) if game.get('AwayTeamMoneyLine') else None,
-                        "spread": game.get('PointSpread'),
-                        "over_under": game.get('OverUnder'),
-                        "updated_at": "now()"
-                    }
-                    supabase.table("odds").upsert(odds_payload, on_conflict="match_id").execute()
-
-                print(f"✅ Procesado: {game.get('AwayTeam')} @ {game.get('HomeTeam')} (ID: {game.get('GameID')})")
-
+                supabase.table("daily_predictions").upsert(prediction_payload, on_conflict="match_id").execute()
+                print(f"✅ Guardado: {away['name']} @ {home['name']}")
             except Exception as e:
-                print(f"❌ Error guardando partido {game.get('GameID')}: {e}")
-        else:
-            print(f"⚠️ Saltando partido {game.get('GameID')}: Equipos no mapeados en BD.")
+                print(f"❌ Error Upsert: {e}")
 
 if __name__ == "__main__":
-    fetch_daily_games()
+    process_daily_predictions()
