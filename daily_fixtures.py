@@ -1,6 +1,6 @@
 import os
 import requests
-import math # Solo usamos librerías nativas
+import math
 from datetime import datetime
 from dotenv import load_dotenv
 from supabase import create_client
@@ -17,19 +17,13 @@ def american_to_decimal(american_odds):
     except: return None
 
 def calcular_probabilidad_nba_lite(mu_home, mu_away):
-    """
-    Aproximación de Skellam usando Distribución Normal.
-    Ideal para NBA porque mu_home + mu_away > 200.
-    """
     diff = mu_home - mu_away
     std_dev = math.sqrt(mu_home + mu_away)
-    
-    # Cálculo de la CDF de una Normal(diff, std_dev) para x > 0
-    # Usamos la función de error (erf) que es nativa de math
     prob_home = 0.5 * (1 + math.erf(diff / (std_dev * math.sqrt(2))))
     return round(prob_home, 4), round(1 - prob_home, 4)
 
 def process_daily_predictions():
+    # Buscamos partidos para hoy según la API
     today_api = datetime.now().strftime("%Y-%b-%d").upper()
     fecha_mx_str = datetime.now().strftime("%d/%m/%Y %H:%M")
     
@@ -44,7 +38,7 @@ def process_daily_predictions():
         return
 
     if not games:
-        print("📭 No hay partidos hoy.")
+        print(f"📭 No hay partidos hoy ({today_api}).")
         return
 
     db_teams = supabase.table("teams").select("id, api_sports_id, name, att_index, def_index, logo_url").eq("league", "NBA").execute().data
@@ -58,11 +52,10 @@ def process_daily_predictions():
             home = team_map[h_id]
             away = team_map[a_id]
 
-            # Lambdas
+            # Lambdas (basado en promedio liga 112)
             mu_h = 112 * (home['att_index'] / away['def_index'])
             mu_a = 112 * (away['att_index'] / home['def_index'])
             
-            # Usamos la función LITE que no necesita Scipy
             p_home, p_away = calcular_probabilidad_nba_lite(mu_h, mu_a)
 
             prediction_payload = {
@@ -80,10 +73,13 @@ def process_daily_predictions():
             }
 
             try:
+                # AQUÍ ES DONDE SE LLENA LA TABLA QUE VISTE EN LA IMAGEN
                 supabase.table("daily_predictions").upsert(prediction_payload, on_conflict="match_id").execute()
-                print(f"✅ Guardado: {away['name']} @ {home['name']}")
+                print(f"✅ Guardado en Supabase: {away['name']} @ {home['name']}")
             except Exception as e:
-                print(f"❌ Error Upsert: {e}")
+                print(f"❌ Error Upsert en {game['GameID']}: {e}")
+        else:
+            print(f"⚠️ Equipo no mapeado: {game.get('HomeTeam')} (ID: {h_id})")
 
 if __name__ == "__main__":
     process_daily_predictions()
