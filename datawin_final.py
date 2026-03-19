@@ -18,16 +18,39 @@ def american_to_decimal(american_odds):
 
 def calcular_probabilidad_nba_lite(mu_home, mu_away):
     diff = mu_home - mu_away
-    std_dev = math.sqrt(mu_home + mu_away)
+    # Desviación estándar promedio en NBA (aprox 13.5 puntos)
+    std_dev = 13.5 
     prob_home = 0.5 * (1 + math.erf(diff / (std_dev * math.sqrt(2))))
     return round(prob_home, 4), round(1 - prob_home, 4)
 
+def calcular_over_under_ajustado(mu_home, mu_away):
+    """
+    Calcula la línea O/U basada en la suma de proyecciones.
+    Ajusta la probabilidad si la línea es muy alta o muy baja (regresión a la media).
+    """
+    total_proyectado = mu_home + mu_away
+    
+    # La línea de apuesta "fair" (justa)
+    linea = round(total_proyectado * 2) / 2
+    
+    # Lógica de probabilidad: 
+    # Si el total proyectado es > 230, la probabilidad de Over tiende a ser más volátil.
+    # Usamos una probabilidad base del 51.5% para el mercado más probable (pequeño sesgo de valor)
+    if total_proyectado > 228:
+        prob_over = 0.52 # Tendencia a juegos de alta puntuación
+    elif total_proyectado < 215:
+        prob_over = 0.48 # Tendencia a juegos defensivos (Under más probable)
+    else:
+        prob_over = 0.50
+        
+    return linea, round(prob_over, 4), round(1 - prob_over, 4)
+
 def process_daily_predictions():
-    # Buscamos partidos para hoy según la API
+    # Fecha para API y registro
     today_api = datetime.now().strftime("%Y-%b-%d").upper()
     fecha_mx_str = datetime.now().strftime("%d/%m/%Y %H:%M")
     
-    print(f"🚀 Iniciando DataWin Pro (Versión Lite) para: {today_api}")
+    print(f"🚀 DataWin Pro: Ajustando predicciones O/U para {today_api}")
 
     url = f"https://api.sportsdata.io/v3/nba/scores/json/GamesByDate/{today_api}?key={api_key}"
     try:
@@ -38,9 +61,10 @@ def process_daily_predictions():
         return
 
     if not games:
-        print(f"📭 No hay partidos hoy ({today_api}).")
+        print(f"📭 Sin partidos para procesar.")
         return
 
+    # Traemos los índices de nuestra DB de equipos
     db_teams = supabase.table("teams").select("id, api_sports_id, name, att_index, def_index, logo_url").eq("league", "NBA").execute().data
     team_map = {str(t['api_sports_id']): t for t in db_teams if t['api_sports_id']}
 
@@ -52,11 +76,16 @@ def process_daily_predictions():
             home = team_map[h_id]
             away = team_map[a_id]
 
-            # Lambdas (basado en promedio liga 112)
-            mu_h = 112 * (home['att_index'] / away['def_index'])
-            mu_a = 112 * (away['att_index'] / home['def_index'])
+            # CÁLCULO DE PUNTOS PROYECTADOS (AJUSTADO)
+            # Fórmula: Media Liga * (Ofensiva Equipo A / Defensiva Equipo B)
+            mu_h = 114.5 * (home['att_index'] / away['def_index']) # Media moderna 2024-2026 es más alta (~114)
+            mu_a = 114.5 * (away['att_index'] / home['def_index'])
             
+            # Ganador
             p_home, p_away = calcular_probabilidad_nba_lite(mu_h, mu_a)
+            
+            # Totales (Over/Under)
+            linea_ou, prob_over, prob_under = calcular_over_under_ajustado(mu_h, mu_a)
 
             prediction_payload = {
                 "match_id": str(game['GameID']),
@@ -65,23 +94,21 @@ def process_daily_predictions():
                 "away_team": away['name'],
                 "home_logo": home.get('logo_url'),
                 "away_logo": away.get('logo_url'),
-                "home_win_p": p_home,
-                "away_win_p": p_away,
+                "home_win_p": round(p_home * 100, 1),
+                "away_win_p": round(p_away * 100, 1),
                 "home_odds": american_to_decimal(game.get('HomeTeamMoneyLine')),
                 "away_odds": american_to_decimal(game.get('AwayTeamMoneyLine')),
+                "over_under_line": linea_ou,
+                "over_p": round(prob_over * 100, 1),
+                "under_p": round(prob_under * 100, 1),
                 "status": game.get('Status')
             }
 
             try:
-                # AQUÍ ES DONDE SE LLENA LA TABLA QUE VISTE EN LA IMAGEN
                 supabase.table("daily_predictions").upsert(prediction_payload, on_conflict="match_id").execute()
-                print(f"✅ Guardado en Supabase: {away['name']} @ {home['name']}")
+                print(f"🔥 {home['name']} vs {away['name']} | O/U: {linea_ou} | Proyección: {round(mu_h + mu_a, 1)}")
             except Exception as e:
-                print(f"❌ Error Upsert en {game['GameID']}: {e}")
-        else:
-            print(f"⚠️ Equipo no mapeado: {game.get('HomeTeam')} (ID: {h_id})")
+                print(f"❌ Error: {e}")
 
 if __name__ == "__main__":
     process_daily_predictions()
-    
-    # Fuerza update 1
