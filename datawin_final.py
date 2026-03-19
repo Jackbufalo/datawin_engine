@@ -25,24 +25,29 @@ def calcular_probabilidad_nba_lite(mu_home, mu_away):
 
 def calcular_over_under_ajustado(mu_home, mu_away):
     """
-    Calcula la línea O/U basada en la suma de proyecciones.
-    Ajusta la probabilidad si la línea es muy alta o muy baja (regresión a la media).
+    Calcula la línea O/U basada en la suma de proyecciones y determina 
+    la probabilidad dinámica usando una distribución normal.
     """
     total_proyectado = mu_home + mu_away
     
-    # La línea de apuesta "fair" (justa)
+    # La línea de apuesta "fair" (redondeo a .5 más cercano)
     linea = round(total_proyectado * 2) / 2
     
-    # Lógica de probabilidad: 
-    # Si el total proyectado es > 230, la probabilidad de Over tiende a ser más volátil.
-    # Usamos una probabilidad base del 51.5% para el mercado más probable (pequeño sesgo de valor)
-    if total_proyectado > 228:
-        prob_over = 0.52 # Tendencia a juegos de alta puntuación
-    elif total_proyectado < 215:
-        prob_over = 0.48 # Tendencia a juegos defensivos (Under más probable)
-    else:
-        prob_over = 0.50
-        
+    # Diferencia entre nuestra proyección y la línea establecida
+    diff = total_proyectado - linea
+    
+    # Desviación estándar típica para totales de la NBA (aprox. 18-20 puntos)
+    # Un valor de 18 permite que pequeñas diferencias en puntos se traduzcan
+    # en cambios notables en el porcentaje.
+    std_dev_total = 18.0 
+    
+    # Cálculo de probabilidad usando la Función de Error (Distribución Normal)
+    # Esto evita el "50%" constante y da una curva suave de probabilidad.
+    prob_over = 0.5 * (1 + math.erf(diff / (std_dev_total * math.sqrt(2))))
+    
+    # Ajuste de límites para evitar valores extremos poco realistas
+    prob_over = max(0.40, min(0.60, prob_over))
+    
     return linea, round(prob_over, 4), round(1 - prob_over, 4)
 
 def process_daily_predictions():
