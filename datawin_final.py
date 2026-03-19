@@ -50,7 +50,7 @@ def process_daily_predictions():
     today_api = datetime.now().strftime("%Y-%b-%d").upper()
     fecha_mx_str = datetime.now().strftime("%d/%m/%Y %H:%M")
     
-    print(f"🚀 DataWin Pro: Ajustando predicciones O/U para {today_api}")
+    print(f"🚀 EJECUTANDO VERSIÓN OVER-UNDER v2 para: {today_api}")
 
     url = f"https://api.sportsdata.io/v3/nba/scores/json/GamesByDate/{today_api}?key={api_key}"
     try:
