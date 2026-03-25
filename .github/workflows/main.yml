@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # Añadimos python-dotenv que es la que te falta
+          # Añadimos python-dotenv que es la que te falta para leer el .env
           pip install google-generativeai supabase requests pandas scipy numpy python-dotenv
 
       - name: 1. Update Raw Stats
