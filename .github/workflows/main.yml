@@ -2,11 +2,9 @@ name: NBA Data Update
 
 on:
   schedule:
-    # 3:00 AM MX (9:00 UTC)
-    - cron: '0 9 * * *' 
-    # 1:00 PM / 13:00 hrs MX (19:00 UTC)
-    - cron: '0 19 * * *' 
-  workflow_dispatch:
+    - cron: '0 9 * * *' # 3:00 AM MX
+    - cron: '0 19 * * *' # 1:00 PM MX
+  workflow_dispatch: # Permite ejecutarlo manualmente
 
 jobs:
   build:
@@ -16,13 +14,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          ref: main # Forzamos que baje la última versión de la rama principal
+          ref: main
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-          
 
       - name: Install dependencies
         run: |
@@ -47,13 +44,14 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SPORT_DATA_IO_KEY: ${{ secrets.SPORT_DATA_IO_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python datawin_final.py
 
-- name: 4. Send Telegram Notification
+      - name: 4. Send Telegram Notification
         if: always()
         run: |
           if [ "${{ job.status }}" = "success" ]; then
-            MESSAGE="✅ *DataWin Pro: Éxito* %0AEl análisis de la NBA se completó correctamente. 🏀 %0APredicciones actualizadas en la web."
+            MESSAGE="✅ *DataWin Pro: Éxito* %0AEl análisis de la NBA se completó correctamente. 🏀"
           else
             MESSAGE="❌ *DataWin Pro: Error* %0AHubo un fallo en el proceso de hoy. Revisa los logs en GitHub. ⚠️"
           fi
