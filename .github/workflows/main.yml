@@ -48,3 +48,16 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SPORT_DATA_IO_KEY: ${{ secrets.SPORT_DATA_IO_KEY }}
         run: python datawin_final.py
+
+- name: 4. Send Telegram Notification
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            MESSAGE="✅ *DataWin Pro: Éxito* %0AEl análisis de la NBA se completó correctamente. 🏀 %0APredicciones actualizadas en la web."
+          else
+            MESSAGE="❌ *DataWin Pro: Error* %0AHubo un fallo en el proceso de hoy. Revisa los logs en GitHub. ⚠️"
+          fi
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d "text=$MESSAGE" \
+            -d "parse_mode=Markdown"
