@@ -3,3 +3,5 @@ python-dotenv
 supabase
 google-generativeai
 pandas
+scipy
+numpy
