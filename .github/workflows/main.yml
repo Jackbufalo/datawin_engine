@@ -46,16 +46,3 @@ jobs:
           SPORT_DATA_IO_KEY: ${{ secrets.SPORT_DATA_IO_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python datawin_final.py
-
-      - name: 4. Send Telegram Notification
-        if: always()
-        env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          [[ "${{ job.status }}" == "success" ]] && STATUS_MSG="✅ *DataWin Pro: Éxito*%0AEl análisis de la NBA se completó correctamente. 🏀" || STATUS_MSG="❌ *DataWin Pro: Error*%0AHubo un fallo en el proceso. Revisa los logs en GitHub. ⚠️"
-          
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_TOKEN/sendMessage" \
-            -d "chat_id=$TELEGRAM_CHAT_ID" \
-            -d "text=$STATUS_MSG" \
-            -d "parse_mode=Markdown"
